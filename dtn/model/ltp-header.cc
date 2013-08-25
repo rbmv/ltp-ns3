@@ -18,6 +18,7 @@
  * Author: Rubén Martínez <rmartinez@deic.uab.cat>
  */
 
+#include "ns3/abort.h"
 #include "ltp-header.h"
 #include "ns3/random-variable.h"
 #include "ns3/tag-buffer.h"
@@ -51,48 +52,71 @@ SessionId::GenSessionNumber() {
 
 void
 SessionId::AddressToInteger(Address peer) {
-	/*
-	byte[] addrbuf=addr.getAddress();
-		long val=(addrbuf[0] & 0xFF);
-		for (int i=1; i<addrbuf.length; i++)
-			val=(val<<8)+(addrbuf[i] & 0xFF);
-		return val;*/
 
 	uint32_t sz = peer.GetSerializedSize();
 	uint8_t data[sz];
-
-//	std::cout << "Add to in " << sz << std::endl;
 
 	TagBuffer buff = TagBuffer(&data[0],&data[sz]);
 	peer.Serialize(buff);
 
 
-	uint8_t type = buff.ReadU8(); // type
+	buff.ReadU8(); // type
 	uint8_t len = buff.ReadU8(); //len
 
-	std::cout << (std::bitset<8>) type << std::endl;
-
 	m_sessionOriginator.clear();
-
 
 	for (uint32_t i = 0; i < len; i++)
 	{
 		m_sessionOriginator.push_back(buff.ReadU8() ); // Serialized data
 	}
-/*
-	for(uint32_t i = 0; i < m_sessionOriginator.size(); i++)
+}
+
+uint32_t
+SessionId::GetU32SessionOriginator(void) const
+{
+
+	uint32_t data = 0;
+	uint8_t offset = 24;
+
+	NS_ABORT_MSG_UNLESS (m_sessionOriginator.size() > 0, "SessionId::Session originator contains no data");
+	NS_ABORT_MSG_UNLESS (m_sessionOriginator.size() <= 4, "SessionId::Session originator will not fit into uint32_t");
+
+	for (uint32_t i = 0; i< m_sessionOriginator.size() ; i++)
 	{
-		std::cout << (std::bitset<8>) m_sessionOriginator[i] << std::endl;
-	}*/
+		data = (m_sessionOriginator[i] << offset);
+		offset-=8;
+	}
+
+	return data;
+}
 
 
+uint64_t
+SessionId::GetU64SessionOriginator(void) const
+{
+
+	uint64_t data = 0;
+	uint8_t offset = 56;
+
+	NS_ABORT_MSG_UNLESS (m_sessionOriginator.size() > 0, "SessionId::Session originator contains no data");
+	NS_ABORT_MSG_UNLESS (m_sessionOriginator.size() <= 8, "SessionId::Session originator will not fit into uint64t");
+
+	for (uint32_t i = 0; i< m_sessionOriginator.size() ; i++)
+	{
+		data = (m_sessionOriginator[i] << offset);
+		offset-=8;
+	}
+
+	return data;
 
 }
 
-LtpHeader::LtpHeader(SegmentType t):
+
+
+LtpHeader::LtpHeader(SegmentType t, SessionId id):
 		m_version(0),
 		m_typeFlags(t),
-		m_sessionId(),
+		m_sessionId(id),
 		m_hdrExtensionCnt(0),
 		m_trailerExtensionCnt(0),
 		m_extensions()
@@ -140,35 +164,62 @@ LtpHeader::Print (std::ostream &os) const
 uint32_t
 LtpHeader::GetSerializedSize (void) const
 {
-  // we reserve 2 bytes for our header.
-  return 2;
+
+  uint32_t size = 2; // Control + Extensions Byte.
+
+  LtpCodec codec;
+
+  if(m_sessionId.m_sessionOriginator.size() > 4)	// SDNV encoded Session Originator
+  		size += codec.ReqSize(m_sessionId.GetU64SessionOriginator());
+  	else
+  		size += codec.ReqSize(m_sessionId.GetU32SessionOriginator());
+
+  size += codec.ReqSize(m_sessionId.m_sessionNumber); // SDNV encoded Session Number
+
+  // No extensions for now
+
+  return size;
 }
 void
 LtpHeader::Serialize (Buffer::Iterator start) const
 {
-  // we can serialize two bytes at the start of the buffer.
-  // we write them in network byte order.
-  //start.WriteHtonU16 (m_data);
 	Buffer::Iterator i = start;
+	LtpCodec codec;
 
-	uint8_t control_byte;
+	uint8_t control_byte = 0;
 
+	control_byte = m_version << 4;
+	control_byte += m_typeFlags;
 
-	  i.WriteHtonU16 (m_sourcePort);
-	  i.WriteHtonU16 (m_destinationPort);
-	  i.WriteHtonU16 (start.GetSize ());
-	  i.WriteU16 (0);
+	i.WriteU8(control_byte); // Write Control Byte
 
-	  if (m_calcChecksum)
-	    {
-	      uint16_t headerChecksum = CalculateHeaderChecksum (start.GetSize ());
-	      i = start;
-	      uint16_t checksum = i.CalculateIpChecksum (start.GetSize (), headerChecksum);
+	LtpCodec::SDNV sdnv;
 
-	      i = start;
-	      i.Next (6);
-	      i.WriteU16 (checksum);
-	    }
+	if(m_sessionId.m_sessionOriginator.size() > 4)
+		sdnv = codec.U64toSdnv(m_sessionId.GetU64SessionOriginator());
+	else
+		sdnv = codec.U32toSdnv(m_sessionId.GetU32SessionOriginator());
+
+	for (uint32_t j=0; j < sdnv.GetN();j++)
+	{
+		i.WriteU8(sdnv.Get(j));	//Write SDNV encoded Session Originator
+	}
+
+	sdnv = codec.U32toSdnv(m_sessionId.m_sessionNumber);
+
+	for (uint32_t j=0; j < sdnv.GetN();j++)
+	{
+		i.WriteU8(sdnv.Get(j)); //Write SDNV encoded Session Number
+	}
+
+	//No LTP extensions supported for now.
+
+	uint8_t extensions_byte = 0;
+
+	extensions_byte = m_hdrExtensionCnt << 4;
+	extensions_byte += m_trailerExtensionCnt;
+
+	i.WriteU8(extensions_byte); // Write Control Byte
 
 
 }
@@ -180,8 +231,29 @@ LtpHeader::Deserialize (Buffer::Iterator start)
   // in host byte order.
   //m_data = start.ReadNtohU16 ();
 
+   Buffer::Iterator i = start;
+
+   uint8_t control_byte = i.ReadU8();
+
+   m_version = control_byte >> 4;
+   m_typeFlags = control_byte & 0x0F;
+
+   // Move this to the LtpCodec some day.
+
+   uint8_t read_byte = i.ReadU8();
+
+   LtpCodec::SDNV originator;
+
+   while ((read_byte >> 7) == 1)
+   {
+	  originator.Add(read_byte); // Add is not prepared for this CHECk
+   }
+
+
+
   // we return the number of bytes effectively read.
-  return 2;
+
+   return GetSerializedSize ();
 }
 
 }

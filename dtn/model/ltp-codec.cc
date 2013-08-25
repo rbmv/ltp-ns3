@@ -79,18 +79,7 @@ LtpCodec::InternalUtoSdnv (uint64_t data) {
 	return sdnv;
 }
 
-/*
-void
-LtpCodec::SDNV::AddOctet(uint8_t octet)
-{
-	uint8_t msb = 0x00;
 
-	if(m_data.size()>0)
-		msb = 0x80;
-
-	m_data.insert(m_data.begin(),(octet | msb));
-}
-*/
 void
 LtpCodec::SDNV::Add(uint8_t octet)
 {
@@ -99,12 +88,10 @@ LtpCodec::SDNV::Add(uint8_t octet)
 	uint8_t msb_bit = octet >> 7;
 
 	if(m_data.size()>0)
-	{
 		msb = 0x01;
-	} else
-	{
+	else
 		msb = 0x00;
-	}
+
 
 	NS_ABORT_MSG_UNLESS (msb_bit == msb, "SDNV::Add(): SDNV misplaced octet");
 	m_data.insert(m_data.begin(), octet);
@@ -149,14 +136,10 @@ LtpCodec::SDNV::operator== (LtpCodec::SDNV const & o) const
 		{
 			if(Get(i) != o.Get(i)) return false;
 		}
-
 		return true;
-
-	} else
-	{
-
-		return false;
 	}
+
+	return false;
 }
 
 } //namespace ns3

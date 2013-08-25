@@ -68,6 +68,9 @@ class SessionId{
 
 		SessionId(Address);
 
+		uint32_t GetU32SessionOriginator(void) const;
+		uint64_t GetU64SessionOriginator(void) const;
+
 		std::vector<uint8_t> m_sessionOriginator;
 		uint32_t m_sessionNumber;
 
@@ -87,8 +90,8 @@ private:
   +-----+-----+-----+-----+-----+-----+-----+-----+
   |                                   	          |
   /                   Session ID                  \
-  \												  /
-  |               								  |
+  \                                               /
+  |                                               |
   +-----+-----+-----+-----+-----+-----+-----+-----+
   | Header Extension Cnt. | Trailer Extension Cnt.|
   +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -105,7 +108,7 @@ public:
     * \brief Construct a null LTP segment
 	*/
 	LtpHeader ();
-	LtpHeader (SegmentType);
+	LtpHeader (SegmentType, SessionId);
 	~LtpHeader ();
 
 	void SetType();
