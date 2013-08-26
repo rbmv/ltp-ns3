@@ -111,6 +111,38 @@ SessionId::GetU64SessionOriginator(void) const
 
 }
 
+void
+SessionId::SetU32SessionOriginator(uint32_t data)
+{
+
+	uint8_t offset = 0;
+	m_sessionOriginator.clear();
+
+	for (uint32_t i = 0; i< 4 ; i++)
+	{
+		m_sessionOriginator.insert(m_sessionOriginator.begin(),(uint8_t) data >> offset);
+		offset+=8;
+	}
+
+}
+
+
+void
+SessionId::SetU64SessionOriginator(uint64_t data)
+{
+
+	uint8_t offset = 0;
+	m_sessionOriginator.clear();
+
+	for (uint32_t i = 0; i< 8 ; i++)
+	{
+		m_sessionOriginator.insert(m_sessionOriginator.begin(),(uint8_t) data >> offset);
+		offset+=8;
+	}
+
+}
+
+
 
 
 LtpHeader::LtpHeader(SegmentType t, SessionId id):
@@ -169,6 +201,7 @@ LtpHeader::GetSerializedSize (void) const
 
   LtpCodec codec;
 
+  // Assume that both peers are running the protocol on the same layer (i.e both using IP addresses as session originator)
   if(m_sessionId.m_sessionOriginator.size() > 4)	// SDNV encoded Session Originator
   		size += codec.ReqSize(m_sessionId.GetU64SessionOriginator());
   	else
@@ -232,26 +265,53 @@ LtpHeader::Deserialize (Buffer::Iterator start)
   //m_data = start.ReadNtohU16 ();
 
    Buffer::Iterator i = start;
+   uint32_t size = 0;
 
-   uint8_t control_byte = i.ReadU8();
+   uint8_t control_byte = i.ReadU8(); // Read Control Byte
+   size++;
 
    m_version = control_byte >> 4;
    m_typeFlags = control_byte & 0x0F;
 
-   // Move this to the LtpCodec some day.
+   LtpCodec::SDNV sdnv;
+   LtpCodec codec;
 
-   uint8_t read_byte = i.ReadU8();
+   uint8_t read_byte = 0;
 
-   LtpCodec::SDNV originator;
-
-   while ((read_byte >> 7) == 1)
+   do
    {
-	  originator.Add(read_byte); // Add is not prepared for this CHECk
-   }
+	  read_byte = i.ReadU8();
+	  sdnv.PushBack(read_byte);
+	  size++;
 
+   } while ((read_byte >> 7) == 1); // Read SDNV encoded Session Originator, the last octet starts with 0, then stop
 
+   if (sdnv.GetOriginalSize() < 32)
+	   m_sessionId.SetU32SessionOriginator(codec.SdnvtoU32(sdnv));
+   else
+	   m_sessionId.SetU64SessionOriginator(codec.SdnvtoU64(sdnv));
 
-  // we return the number of bytes effectively read.
+   sdnv.Clear();
+
+   do
+   {
+  	  read_byte = i.ReadU8();
+  	  sdnv.PushBack(read_byte);
+  	  size++;
+
+   } while ((read_byte >> 7) == 1); // Read SDNV encoded Session Number, the last octet starts with 0, then stop
+
+   m_sessionId.m_sessionNumber = codec.SdnvtoU32(sdnv);
+
+   uint8_t extensions_byte = i.ReadU8();
+   size++;
+
+   m_hdrExtensionCnt = extensions_byte >> 4;
+   m_trailerExtensionCnt = extensions_byte & 0x0F;
+
+   //No LTP extensions supported for now.
+
+   NS_ASSERT_MSG(size == GetSerializedSize(), "Ltp-Header deserialize error,  wrong size");
 
    return GetSerializedSize ();
 }

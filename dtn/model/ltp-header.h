@@ -71,6 +71,9 @@ class SessionId{
 		uint32_t GetU32SessionOriginator(void) const;
 		uint64_t GetU64SessionOriginator(void) const;
 
+		void SetU32SessionOriginator(uint32_t);
+		void SetU64SessionOriginator(uint64_t);
+
 		std::vector<uint8_t> m_sessionOriginator;
 		uint32_t m_sessionNumber;
 

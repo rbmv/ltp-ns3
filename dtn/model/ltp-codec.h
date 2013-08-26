@@ -37,9 +37,11 @@ public:
 		inline ~SDNV(){}
 
 		void Add(uint8_t); // Values should be added from LSB to MSB
+		void PushBack(uint8_t);
 
 		uint8_t Get(uint32_t) const;
 		uint32_t GetN(void) const;
+		uint8_t GetOriginalSize();
 
 		void Clear();
 
@@ -62,6 +64,11 @@ public:
 	inline SDNV U32toSdnv (uint32_t data) { return InternalUtoSdnv( (uint64_t) data); }
 	inline SDNV U64toSdnv (uint64_t data) { return InternalUtoSdnv(data); }
 
+	inline uint8_t SdnvtoU8 (SDNV sdnv) { return (uint8_t) InternalSdnvtoU(sdnv); }
+	inline uint8_t SdnvtoU16 (SDNV sdnv) { return (uint16_t) InternalSdnvtoU(sdnv); }
+	inline uint8_t SdnvtoU32 (SDNV sdnv) { return (uint32_t) InternalSdnvtoU(sdnv); }
+	inline uint8_t SdnvtoU64 (SDNV sdnv) { return (uint64_t) InternalSdnvtoU(sdnv); }
+
 	inline uint8_t ReqSize(uint8_t data) { return InternalReqSize( (uint64_t) data,GetMaxSize(8)); }
 	inline uint8_t ReqSize(uint16_t data){ return InternalReqSize( (uint64_t) data,GetMaxSize(16)); }
 	inline uint8_t ReqSize(uint32_t data){ return InternalReqSize( (uint64_t) data, GetMaxSize(32));}
@@ -73,6 +80,7 @@ private:
 	uint8_t GetMaxSize(uint8_t);
 	uint8_t InternalReqSize(uint64_t,uint8_t);
 	SDNV InternalUtoSdnv(uint64_t);
+	uint64_t InternalSdnvtoU(SDNV);
 
 
 };

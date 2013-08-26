@@ -80,6 +80,48 @@ LtpCodec::InternalUtoSdnv (uint64_t data) {
 }
 
 
+uint64_t
+LtpCodec::InternalSdnvtoU(LtpCodec::SDNV sdnv) {
+
+	uint64_t data = 0;
+
+	uint8_t offset = 0;
+	uint8_t mask = 0x7F;
+
+	for(uint32_t i = 0; i < sdnv.GetN(); i++) {
+
+		uint8_t	octet = sdnv.Get(i);
+		uint64_t data_aux = (octet &  mask);
+		data += (data_aux << offset);
+		offset+=7;
+	}
+
+
+	return data;
+}
+
+uint8_t
+LtpCodec::SDNV::GetOriginalSize() {
+
+	uint8_t size = (m_data.size()-1) * 7;
+
+	uint8_t last_octet = m_data[m_data.size()-1];
+	uint8_t mask = 0;
+
+	for(uint32_t i = 0; i < 8; i++)
+	{
+		mask = (last_octet >> i) & 0x01;
+
+		if (mask == 0)
+		{
+			size += i;
+			break;
+		}
+	}
+	return size;
+}
+
+
 void
 LtpCodec::SDNV::Add(uint8_t octet)
 {
@@ -97,6 +139,15 @@ LtpCodec::SDNV::Add(uint8_t octet)
 	m_data.insert(m_data.begin(), octet);
 
 }
+
+void
+LtpCodec::SDNV::PushBack(uint8_t octet)
+{
+
+	m_data.push_back(octet);
+
+}
+
 
 void
 LtpCodec::SDNV::Print(std::ostream &os) const
